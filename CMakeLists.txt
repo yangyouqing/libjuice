@@ -3,6 +3,7 @@ project (libjuice
 	VERSION 0.7.2
 	LANGUAGES C)
 set(PROJECT_DESCRIPTION "JUICE is a UDP ICE library")
+set(CMAKE_VERBOSE_MAKEFILE ON)
 
 option(USE_NETTLE "Use Nettle for hash functions" OFF)
 option(NO_SERVER "Disable server support" OFF)
@@ -55,7 +56,6 @@ set(LIBJUICE_HEADERS
 )
 
 set(TESTS_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/test/main.c
     ${CMAKE_CURRENT_SOURCE_DIR}/test/crc32.c
     ${CMAKE_CURRENT_SOURCE_DIR}/test/base64.c
     ${CMAKE_CURRENT_SOURCE_DIR}/test/stun.c
@@ -70,7 +70,8 @@ set(TESTS_SOURCES
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-add_library(juice SHARED ${LIBJUICE_SOURCES})
+#add_library(juice SHARED ${LIBJUICE_SOURCES})
+add_library(juice STATIC ${LIBJUICE_SOURCES})
 set_target_properties(juice PROPERTIES VERSION ${PROJECT_VERSION})
 
 target_include_directories(juice PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -125,7 +126,7 @@ endif()
 add_library(LibJuice::LibJuice ALIAS juice)
 add_library(LibJuice::LibJuiceStatic ALIAS juice-static)
 
-install(TARGETS juice LIBRARY DESTINATION lib)
+#install(TARGETS juice LIBRARY DESTINATION lib)
 install(FILES ${LIBJUICE_HEADERS} DESTINATION include/juice)
 
 if(NOT MSVC)
@@ -151,13 +152,45 @@ if(ENABLE_LOCAL_ADDRESS_TRANSLATION)
 	target_compile_definitions(juice PRIVATE JUICE_ENABLE_LOCAL_ADDRESS_TRANSLATION=1)
 endif()
 
+set(LIBEV_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libev/include)
+set(LIBEV_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libev/lib)
+set(LIBUMQTT_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libumqtt/include/umqtt)
+set(LIBUMQTT_LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../libumqtt/lib)
+
+link_directories(juice-client PRIVATE ${LIBEV_LIB_DIR} ${LIBUMQTT_LIB_DIR})
+link_directories(juice-peer PRIVATE ${LIBEV_LIB_DIR} ${LIBUMQTT_LIB_DIR})
+
 # Tests
 if(NOT NO_TESTS)
-	add_executable(juice-tests ${TESTS_SOURCES})
+	add_executable(juice-tests ${TESTS_SOURCES}  ${CMAKE_CURRENT_SOURCE_DIR}/test/main.c)
 	target_include_directories(juice-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 	target_include_directories(juice-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/juice)
 	set_target_properties(juice-tests PROPERTIES VERSION ${PROJECT_VERSION})
 	set_target_properties(juice-tests PROPERTIES OUTPUT_NAME tests)
 	target_link_libraries(juice-tests juice)
+
+
+	add_executable(juice-client  ${CMAKE_CURRENT_SOURCE_DIR}/test/juice_client.c ${CMAKE_CURRENT_SOURCE_DIR}/test/ice_common.c)
+	target_include_directories(juice-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+	target_include_directories(juice-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+	target_include_directories(juice-client PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/juice)
+	target_include_directories(juice-client PRIVATE ${LIBUMQTT_INCLUDE_DIR})
+	target_include_directories(juice-client PRIVATE ${LIBEV_INCLUDE_DIR})
+	set_target_properties(juice-client PROPERTIES VERSION ${PROJECT_VERSION})
+	set_target_properties(juice-client PROPERTIES OUTPUT_NAME jclient)
+	target_link_libraries(juice-client juice ev umqtt)
+
+	add_executable(juice-peer  ${CMAKE_CURRENT_SOURCE_DIR}/test/juice_peer.c ${CMAKE_CURRENT_SOURCE_DIR}/test/ice_common.c)
+	target_include_directories(juice-peer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+	target_include_directories(juice-peer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+	target_include_directories(juice-peer PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include/juice)
+	target_include_directories(juice-peer PRIVATE ${LIBUMQTT_INCLUDE_DIR})
+	target_include_directories(juice-peer PRIVATE ${LIBEV_INCLUDE_DIR})
+	set_target_properties(juice-peer PROPERTIES VERSION ${PROJECT_VERSION})
+	set_target_properties(juice-peer PROPERTIES OUTPUT_NAME jpeer)
+	#target_link_libraries(juice-peer PRIVATE ${LIBEV_LIB_DIR})
+	link_directories(juice-peer PRIVATE ${LIBEV_LIB_DIR})
+	target_link_libraries(juice-peer juice ev umqtt)
+
 endif()
 

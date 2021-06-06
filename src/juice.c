@@ -110,6 +110,12 @@ JUICE_EXPORT int juice_send_diffserv(juice_agent_t *agent, const char *data, siz
 
 JUICE_EXPORT juice_state_t juice_get_state(juice_agent_t *agent) { return agent_get_state(agent); }
 
+JUICE_EXPORT bool juice_is_gather_done(juice_agent_t *agent) 
+{
+    return agent->gathering_done;
+}
+
+
 JUICE_EXPORT int juice_get_selected_candidates(juice_agent_t *agent, char *local, size_t local_size,
                                                char *remote, size_t remote_size) {
 	if (!agent || (!local && local_size) || (!remote && remote_size))
