@@ -67,6 +67,8 @@ struct config {
 
 static struct ev_timer reconnect_timer;
 static struct ev_timer login_timer;
+static struct ev_timer send_timer;
+
 static struct ev_timer counter_timer;
 
 static int login_succeed = 0;
@@ -296,6 +298,14 @@ static void do_login(struct ev_loop *loop, struct ev_timer *w, int revents)
     umqtt_log_info("login ...\n");
 }
 
+static void do_send(struct ev_loop *loop, struct ev_timer *w, int revents)
+{
+    const char *msg = "[from client]......\n";
+    if (JUICE_STATE_COMPLETED == juice_get_state(agent1)) {
+        juice_send(agent1, msg, strlen(msg)+1);
+        printf ("juice-client sent\n");
+    }
+}
 
 
 static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
@@ -471,8 +481,10 @@ int main(int argc, char **argv) {
     ev_timer_start(loop, &reconnect_timer);
 
     ev_timer_init(&login_timer, do_login, 0.1, 1.0);
-//    ev_timer_start(loop, &login_timer);
 
+    ev_timer_init(&send_timer, do_send, 0.1, 0.0);
+    ev_timer_set(&send_timer, 1, 1.0);
+    ev_timer_start(loop, &send_timer);
     
     ev_run(loop, 0);
 

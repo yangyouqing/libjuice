@@ -410,6 +410,10 @@ static void do_connect(struct ev_loop *loop, struct ev_timer *w, int revents)
 static void do_send(struct ev_loop *loop, struct ev_timer *w, int revents)
 {
     const char *msg = "[from peer]......\n";
+    if (JUICE_STATE_COMPLETED == juice_get_state(agent2)) {
+        juice_send(agent2, msg, strlen(msg)+1);
+        printf ("juice-peer sent\n");
+    }
 }
 
 static void signal_cb(struct ev_loop *loop, ev_signal *w, int revents)
@@ -445,6 +449,11 @@ int main(int argc, char **argv) {
     juice_peer();
     ev_timer_init(&reconnect_timer, do_connect, 0.1, 0.0);
     ev_timer_start(loop, &reconnect_timer);
+
+    ev_timer_init(&send_timer, do_send, 0.1, 0.0);
+    ev_timer_set(&send_timer, 1, 1.0);
+    ev_timer_start(loop, &send_timer);
+    
     ev_run(loop, 0);
 
 	return 0;
