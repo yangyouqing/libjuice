@@ -638,10 +638,14 @@ void agent_run(juice_agent_t *agent) {
 	// Main loop
 	timestamp_t next_timestamp;
 	while (agent_bookkeeping(agent, &next_timestamp) == 0) {
-		timediff_t timediff = next_timestamp - current_timestamp();
+        if (NULL != agent->config.cb_on_idle_running) {
+            agent->config.cb_on_idle_running();
+        }
+        timediff_t timediff = 0;
+		//timediff_t timediff = next_timestamp - current_timestamp();
 		if (timediff < 0)
 			timediff = 0;
-
+        timediff = 10;   // add by yyq@20210607
 		JLOG_VERBOSE("Setting select timeout to %ld ms", (long)timediff);
 		struct timeval timeout;
 		timeout.tv_sec = (long)(timediff / 1000);

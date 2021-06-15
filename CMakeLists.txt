@@ -4,6 +4,7 @@ project (libjuice
 	LANGUAGES C)
 set(PROJECT_DESCRIPTION "JUICE is a UDP ICE library")
 set(CMAKE_VERBOSE_MAKEFILE ON)
+set(CMAKE_C_FLAGS " -Wall -O0 -g ${CC_WARNING_FLAGS} ${CMAKE_C_FLAGS}")
 
 option(USE_NETTLE "Use Nettle for hash functions" OFF)
 option(NO_SERVER "Disable server support" OFF)
@@ -20,7 +21,9 @@ else()
 	option(NO_ATOMICS "Force disabling C11 atomics" OFF)
 endif()
 
-set(C_STANDARD 11)
+#set(C_STANDARD 11)
+#set(C_STANDARD 99)
+set(CMAKE_C_FLAGS -std=gnu99)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
 
@@ -127,7 +130,7 @@ endif()
 add_library(LibJuice::LibJuice ALIAS juice)
 add_library(LibJuice::LibJuiceStatic ALIAS juice-static)
 
-#install(TARGETS juice LIBRARY DESTINATION lib)
+install(TARGETS juice  DESTINATION lib)
 install(FILES ${LIBJUICE_HEADERS} DESTINATION include/juice)
 
 if(NOT MSVC)
@@ -190,7 +193,6 @@ if(NOT NO_TESTS)
 	set_target_properties(juice-peer PROPERTIES VERSION ${PROJECT_VERSION})
 	set_target_properties(juice-peer PROPERTIES OUTPUT_NAME jpeer)
 	#target_link_libraries(juice-peer PRIVATE ${LIBEV_LIB_DIR})
-	link_directories(juice-peer PRIVATE ${LIBEV_LIB_DIR})
 	target_link_libraries(juice-peer juice ev umqtt)
 
 endif()

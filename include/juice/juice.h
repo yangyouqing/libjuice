@@ -84,7 +84,7 @@ typedef struct juice_config {
 	juice_cb_candidate_t cb_candidate;
 	juice_cb_gathering_done_t cb_gathering_done;
 	juice_cb_recv_t cb_recv;
-
+    void (*cb_on_idle_running)();
 	void *user_ptr;
 
 } juice_config_t;

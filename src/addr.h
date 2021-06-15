@@ -20,7 +20,9 @@
 #define JUICE_ADDR_H
 
 #include "socket.h"
-
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netdb.h>
 #include <stdbool.h>
 #include <stdint.h>
 
