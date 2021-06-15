@@ -154,6 +154,29 @@ JUICE_EXPORT int juice_get_selected_addresses(juice_agent_t *agent, char *local,
 	return JUICE_ERR_SUCCESS;
 }
 
+
+
+
+JUICE_EXPORT int juice_get_selected_pair(juice_agent_t *agent, struct sockaddr **local, struct sockaddr **remote)
+{
+    mutex_lock(&agent->mutex);
+	ice_candidate_pair_t *pair = agent->selected_pair;
+	if (!pair) {
+		mutex_unlock(&agent->mutex);
+		return -1;
+	}
+
+    if (NULL != local) {
+        *local = (struct sockaddr*)&pair->local->resolved.addr;
+    }
+
+    if (NULL != remote) {
+        *remote = (struct sockaddr*)&pair->remote->resolved.addr;
+    }
+    mutex_unlock(&agent->mutex);
+    return 0;
+}
+
 JUICE_EXPORT const char *juice_state_to_string(juice_state_t state) {
 	switch (state) {
 	case JUICE_STATE_DISCONNECTED:

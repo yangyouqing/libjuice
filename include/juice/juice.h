@@ -26,7 +26,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-
+#include <sys/socket.h>
 #ifdef _WIN32
 #define JUICE_EXPORT __declspec(dllexport)
 #else
@@ -106,6 +106,11 @@ JUICE_EXPORT int juice_get_selected_candidates(juice_agent_t *agent, char *local
                                                char *remote, size_t remote_size);
 JUICE_EXPORT int juice_get_selected_addresses(juice_agent_t *agent, char *local, size_t local_size,
                                               char *remote, size_t remote_size);
+
+
+JUICE_EXPORT int juice_get_selected_pair(juice_agent_t *agent, struct sockaddr **local, struct sockaddr **remote);
+
+
 JUICE_EXPORT const char *juice_state_to_string(juice_state_t state);
 
 
