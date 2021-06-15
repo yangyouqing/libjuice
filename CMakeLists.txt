@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.7)
 project (libjuice
-	VERSION 0.7.2
+	VERSION 0.7.4
 	LANGUAGES C)
 set(PROJECT_DESCRIPTION "JUICE is a UDP ICE library")
 set(CMAKE_VERBOSE_MAKEFILE ON)
@@ -65,6 +65,7 @@ set(TESTS_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/test/turn.c
     ${CMAKE_CURRENT_SOURCE_DIR}/test/server.c
     ${CMAKE_CURRENT_SOURCE_DIR}/test/conflict.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/test/bind.c
 )
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
