@@ -19,14 +19,10 @@
 #ifndef JUICE_AGENT_H
 #define JUICE_AGENT_H
 
-#ifdef __STDC_NO_ATOMICS__
-#define NO_ATOMICS
-#endif
-
 #include "addr.h"
+#include "conn.h"
 #include "ice.h"
 #include "juice.h"
-#include "socket.h"
 #include "stun.h"
 #include "thread.h"
 #include "timestamp.h"
@@ -34,10 +30,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-
-#ifndef NO_ATOMICS
-#include <stdatomic.h>
-#endif
 
 // RFC 8445: Agents MUST NOT use an RTO value smaller than 500 ms.
 #define MIN_STUN_RETRANSMISSION_TIMEOUT 500 // msecs
@@ -62,8 +54,10 @@
 #define MAX_SERVER_ENTRIES_COUNT 2 // max STUN server entries
 #define MAX_RELAY_ENTRIES_COUNT 2  // max TURN server entries
 
+// Max TURN redirections for ALTERNATE-SERVER mechanism
+#define MAX_TURN_REDIRECTIONS 1
+
 // Compute max candidates and entries count
-// This guarantees 8 (+1 to be safe) host candidates slots
 #define MAX_STUN_SERVER_RECORDS_COUNT MAX_SERVER_ENTRIES_COUNT
 #define MAX_HOST_CANDIDATES_COUNT ((ICE_MAX_CANDIDATES_COUNT - MAX_STUN_SERVER_RECORDS_COUNT) / 2)
 #define MAX_PEER_REFLEXIVE_CANDIDATES_COUNT MAX_HOST_CANDIDATES_COUNT
@@ -114,22 +108,16 @@ typedef struct agent_stun_entry {
 
 	// TURN
 	agent_turn_state_t *turn;
+	unsigned int turn_redirections;
 	struct agent_stun_entry *relay_entry;
 
-#ifdef NO_ATOMICS
-	volatile bool armed;
-#else
-	atomic_flag armed;
-#endif
+	atomic(bool) armed;
 } agent_stun_entry_t;
 
 struct juice_agent {
 	juice_config_t config;
 	juice_state_t state;
 	agent_mode_t mode;
-	socket_t sock;
-	thread_t thread;
-	mutex_t mutex;
 
 	ice_description_t local;
 	ice_description_t remote;
@@ -141,27 +129,24 @@ struct juice_agent {
 
 	agent_stun_entry_t entries[MAX_STUN_ENTRIES_COUNT];
 	int entries_count;
-#ifdef NO_ATOMICS
-	agent_stun_entry_t *volatile selected_entry;
-#else
-	_Atomic(agent_stun_entry_t *) selected_entry;
-#endif
+	atomic_ptr(agent_stun_entry_t) selected_entry;
 
 	uint64_t ice_tiebreaker;
 	timestamp_t fail_timestamp;
 	bool gathering_done;
-	bool thread_started;
-	bool thread_stopped;
 
-	mutex_t send_mutex;
-	int send_ds;
+	int conn_index;
+	void *conn_impl;
+
+	thread_t resolver_thread;
+	bool resolver_thread_started;
 };
 
 juice_agent_t *agent_create(const juice_config_t *config);
-void agent_do_destroy(juice_agent_t *agent);
 void agent_destroy(juice_agent_t *agent);
 
 int agent_gather_candidates(juice_agent_t *agent);
+int agent_resolve_servers(juice_agent_t *agent);
 int agent_get_local_description(juice_agent_t *agent, char *buffer, size_t size);
 int agent_set_remote_description(juice_agent_t *agent, const char *sdp);
 int agent_add_remote_candidate(juice_agent_t *agent, const char *sdp);
@@ -177,13 +162,14 @@ juice_state_t agent_get_state(juice_agent_t *agent);
 int agent_get_selected_candidate_pair(juice_agent_t *agent, ice_candidate_t *local,
                                       ice_candidate_t *remote);
 
-void agent_run(juice_agent_t *agent);
-int agent_recv(juice_agent_t *agent);
+int agent_conn_recv(juice_agent_t *agent, char *buf, size_t len, const addr_record_t *src);
+int agent_conn_update(juice_agent_t *agent, timestamp_t *next_timestamp);
+int agent_conn_fail(juice_agent_t *agent);
+
 int agent_input(juice_agent_t *agent, char *buf, size_t len, const addr_record_t *src,
                 const addr_record_t *relayed); // relayed may be NULL
-int agent_interrupt(juice_agent_t *agent);
-void agent_change_state(juice_agent_t *agent, juice_state_t state);
 int agent_bookkeeping(juice_agent_t *agent, timestamp_t *next_timestamp);
+void agent_change_state(juice_agent_t *agent, juice_state_t state);
 int agent_verify_stun_binding(juice_agent_t *agent, void *buf, size_t size,
                               const stun_message_t *msg);
 int agent_verify_credentials(juice_agent_t *agent, const agent_stun_entry_t *entry, void *buf,
@@ -194,9 +180,9 @@ int agent_dispatch_stun(juice_agent_t *agent, void *buf, size_t size, stun_messa
 int agent_process_stun_binding(juice_agent_t *agent, const stun_message_t *msg,
                                agent_stun_entry_t *entry, const addr_record_t *src,
                                const addr_record_t *relayed); // relayed may be NULL
-int agent_send_stun_binding(juice_agent_t *agent, agent_stun_entry_t *entry,
-                            stun_class_t msg_class, unsigned int error_code,
-                            const uint8_t *transaction_id, const addr_record_t *mapped);
+int agent_send_stun_binding(juice_agent_t *agent, agent_stun_entry_t *entry, stun_class_t msg_class,
+                            unsigned int error_code, const uint8_t *transaction_id,
+                            const addr_record_t *mapped);
 int agent_process_turn_allocate(juice_agent_t *agent, const stun_message_t *msg,
                                 agent_stun_entry_t *entry);
 int agent_send_turn_allocate_request(juice_agent_t *agent, const agent_stun_entry_t *entry,
@@ -230,6 +216,8 @@ void agent_update_gathering_done(juice_agent_t *agent);
 void agent_update_candidate_pairs(juice_agent_t *agent);
 void agent_update_ordered_pairs(juice_agent_t *agent);
 
+agent_stun_entry_t *agent_find_entry_from_transaction_id(juice_agent_t *agent,
+                                                         const uint8_t *transaction_id);
 agent_stun_entry_t *
 agent_find_entry_from_record(juice_agent_t *agent, const addr_record_t *record,
                              const addr_record_t *relayed); // relayed may be NULL

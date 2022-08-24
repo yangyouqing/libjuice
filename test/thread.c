@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2020 Paul-Louis Ageneau
+ * Copyright (c) 2022 Paul-Louis Ageneau
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -15,8 +15,6 @@
  * License along with this library; if not, write to the Free Software
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
-
-#ifndef NO_SERVER
 
 #include "juice/juice.h"
 
@@ -34,15 +32,8 @@ static void sleep(unsigned int secs) { Sleep(secs * 1000); }
 
 #define BUFFER_SIZE 4096
 
-#define TURN_USERNAME "server_test"
-#define TURN_PASSWORD "79874638521694"
-
-static juice_server_t *server;
 static juice_agent_t *agent1;
 static juice_agent_t *agent2;
-static bool srflx_success = false;
-static bool relay_success = false;
-static bool success = false;
 
 static void on_state_changed1(juice_agent_t *agent, juice_state_t state, void *user_ptr);
 static void on_state_changed2(juice_agent_t *agent, juice_state_t state, void *user_ptr);
@@ -56,45 +47,26 @@ static void on_gathering_done2(juice_agent_t *agent, void *user_ptr);
 static void on_recv1(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 static void on_recv2(juice_agent_t *agent, const char *data, size_t size, void *user_ptr);
 
-int test_server() {
+int test_thread() {
 	juice_set_log_level(JUICE_LOG_LEVEL_DEBUG);
 
-	// Create server
-	juice_server_credentials_t credentials[1];
-	memset(&credentials, 0, sizeof(credentials));
-	credentials[0].username = TURN_USERNAME;
-	credentials[0].password = TURN_PASSWORD;
-
-	juice_server_config_t server_config;
-	memset(&server_config, 0, sizeof(server_config));
-	server_config.port = 3478;
-	server_config.credentials = credentials;
-	server_config.credentials_count = 1;
-	server_config.max_allocations = 100;
-	server_config.realm = "Juice test server";
-	server = juice_server_create(&server_config);
-
-	if(juice_server_get_port(server) != 3478) {
-		printf("juice_server_get_port failed\n");
-		juice_server_destroy(server);
-		return -1;
-	}
-
-	// Agent 1: Create agent
+	// Agent 1: Create agent in thread concurrency mode
 	juice_config_t config1;
 	memset(&config1, 0, sizeof(config1));
+	config1.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 
-	// Set STUN server
-	config1.stun_server_host = "localhost";
+	// STUN server
+	config1.stun_server_host = "stun.stunprotocol.org";
 	config1.stun_server_port = 3478;
 
-	// Set TURN server
+	// TURN server
+	// Please do not use outside of libjuice tests
 	juice_turn_server_t turn_server;
 	memset(&turn_server, 0, sizeof(turn_server));
-	turn_server.host = "localhost";
+	turn_server.host = "stun.ageneau.net";
 	turn_server.port = 3478;
-	turn_server.username = TURN_USERNAME;
-	turn_server.password = TURN_PASSWORD;
+	turn_server.username = "juice_test";
+	turn_server.password = "28245150316902";
 	config1.turn_servers = &turn_server;
 	config1.turn_servers_count = 1;
 
@@ -106,15 +78,16 @@ int test_server() {
 
 	agent1 = juice_create(&config1);
 
-	// Agent 2: Create agent
+	// Agent 2: Create agent in thread concurrency mode
 	juice_config_t config2;
 	memset(&config2, 0, sizeof(config2));
+	config2.concurrency_mode = JUICE_CONCURRENCY_MODE_THREAD;
 
-	// Set STUN server
-	config2.stun_server_host = "localhost";
+	// STUN server
+	config2.stun_server_host = "stun.stunprotocol.org";
 	config2.stun_server_port = 3478;
 
-	// Set TURN server
+	// Use the same TURN server
 	config2.turn_servers = &turn_server;
 	config2.turn_servers_count = 1;
 
@@ -152,19 +125,57 @@ int test_server() {
 
 	// -- Connection should be finished --
 
+	// Check states
+	juice_state_t state1 = juice_get_state(agent1);
+	juice_state_t state2 = juice_get_state(agent2);
+	bool success = (state1 == JUICE_STATE_COMPLETED && state2 == JUICE_STATE_COMPLETED);
+
+	// Retrieve candidates
+	char local[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
+	char remote[JUICE_MAX_CANDIDATE_SDP_STRING_LEN];
+	if (success &=
+	    (juice_get_selected_candidates(agent1, local, JUICE_MAX_CANDIDATE_SDP_STRING_LEN, remote,
+	                                   JUICE_MAX_CANDIDATE_SDP_STRING_LEN) == 0)) {
+		printf("Local candidate  1: %s\n", local);
+		printf("Remote candidate 1: %s\n", remote);
+		if ((!strstr(local, "typ host") && !strstr(local, "typ prflx")) ||
+		    (!strstr(remote, "typ host") && !strstr(remote, "typ prflx")))
+			success = false; // local connection should be possible
+	}
+	if (success &=
+	    (juice_get_selected_candidates(agent2, local, JUICE_MAX_CANDIDATE_SDP_STRING_LEN, remote,
+	                                   JUICE_MAX_CANDIDATE_SDP_STRING_LEN) == 0)) {
+		printf("Local candidate  2: %s\n", local);
+		printf("Remote candidate 2: %s\n", remote);
+		if ((!strstr(local, "typ host") && !strstr(local, "typ prflx")) ||
+		    (!strstr(remote, "typ host") && !strstr(remote, "typ prflx")))
+			success = false; // local connection should be possible
+	}
+
+	// Retrieve addresses
+	char localAddr[JUICE_MAX_ADDRESS_STRING_LEN];
+	char remoteAddr[JUICE_MAX_ADDRESS_STRING_LEN];
+	if (success &= (juice_get_selected_addresses(agent1, localAddr, JUICE_MAX_ADDRESS_STRING_LEN,
+	                                             remoteAddr, JUICE_MAX_ADDRESS_STRING_LEN) == 0)) {
+		printf("Local address  1: %s\n", localAddr);
+		printf("Remote address 1: %s\n", remoteAddr);
+	}
+	if (success &= (juice_get_selected_addresses(agent2, localAddr, JUICE_MAX_ADDRESS_STRING_LEN,
+	                                             remoteAddr, JUICE_MAX_ADDRESS_STRING_LEN) == 0)) {
+		printf("Local address  2: %s\n", localAddr);
+		printf("Remote address 2: %s\n", remoteAddr);
+	}
+
 	// Agent 1: destroy
 	juice_destroy(agent1);
 
 	// Agent 2: destroy
 	juice_destroy(agent2);
 
-	// Destroy server
-	juice_server_destroy(server);
-
 	// Sleep so we can check destruction went well
 	sleep(2);
 
-	if (srflx_success && relay_success && success) {
+	if (success) {
 		printf("Success\n");
 		return 0;
 	} else {
@@ -198,18 +209,6 @@ static void on_state_changed2(juice_agent_t *agent, juice_state_t state, void *u
 static void on_candidate1(juice_agent_t *agent, const char *sdp, void *user_ptr) {
 	printf("Candidate 1: %s\n", sdp);
 
-	// Success if a valid srflx candidate is emitted
-	if (strstr(sdp, " typ srflx raddr 0.0.0.0 rport 0"))
-		srflx_success = true;
-
-	// Success if a valid relay candidate is emitted
-	if (strstr(sdp, " typ relay raddr 0.0.0.0 rport 0"))
-		relay_success = true;
-
-	// Filter relayed candidates
-	if (!strstr(sdp, "relay"))
-		return;
-
 	// Agent 2: Receive it from agent 1
 	juice_add_remote_candidate(agent2, sdp);
 }
@@ -217,18 +216,6 @@ static void on_candidate1(juice_agent_t *agent, const char *sdp, void *user_ptr)
 // Agent 2: on local candidate gathered
 static void on_candidate2(juice_agent_t *agent, const char *sdp, void *user_ptr) {
 	printf("Candidate 2: %s\n", sdp);
-
-	// Success if a valid srflx candidate is emitted
-	if (strstr(sdp, " typ srflx raddr 0.0.0.0 rport 0"))
-		srflx_success = true;
-
-	// Success if a valid relay candidate is emitted
-	if (strstr(sdp, " typ relay raddr 0.0.0.0 rport 0"))
-		relay_success = true;
-
-	// Filter relayed candidates
-	if (!strstr(sdp, "relay"))
-		return;
 
 	// Agent 1: Receive it from agent 2
 	juice_add_remote_candidate(agent1, sdp);
@@ -254,7 +241,6 @@ static void on_recv1(juice_agent_t *agent, const char *data, size_t size, void *
 	memcpy(buffer, data, size);
 	buffer[size] = '\0';
 	printf("Received 1: %s\n", buffer);
-	success = true;
 }
 
 // Agent 2: on message received
@@ -265,7 +251,4 @@ static void on_recv2(juice_agent_t *agent, const char *data, size_t size, void *
 	memcpy(buffer, data, size);
 	buffer[size] = '\0';
 	printf("Received 2: %s\n", buffer);
-	success = true;
 }
-
-#endif // ifndef NO_SERVER

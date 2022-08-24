@@ -17,6 +17,7 @@
  */
 
 #include "juice.h"
+#include "addr.h"
 #include "agent.h"
 #include "ice.h"
 
@@ -143,12 +144,10 @@ JUICE_EXPORT int juice_get_selected_addresses(juice_agent_t *agent, char *local,
 	if (agent_get_selected_candidate_pair(agent, &local_cand, &remote_cand))
 		return JUICE_ERR_NOT_AVAIL;
 
-	if (local_size &&
-	    snprintf(local, local_size, "%s:%s", local_cand.hostname, local_cand.service) < 0)
+	if (local_size && addr_record_to_string(&local_cand.resolved, local, local_size) < 0)
 		return JUICE_ERR_FAILED;
 
-	if (remote_size &&
-	    snprintf(remote, remote_size, "%s:%s", remote_cand.hostname, remote_cand.service) < 0)
+	if (remote_size && addr_record_to_string(&remote_cand.resolved, remote, remote_size) < 0)
 		return JUICE_ERR_FAILED;
 
 	return JUICE_ERR_SUCCESS;
@@ -159,10 +158,8 @@ JUICE_EXPORT int juice_get_selected_addresses(juice_agent_t *agent, char *local,
 
 JUICE_EXPORT int juice_get_selected_pair(juice_agent_t *agent, struct sockaddr **local, struct sockaddr **remote)
 {
-    mutex_lock(&agent->mutex);
 	ice_candidate_pair_t *pair = agent->selected_pair;
 	if (!pair) {
-		mutex_unlock(&agent->mutex);
 		return -1;
 	}
 
@@ -173,7 +170,6 @@ JUICE_EXPORT int juice_get_selected_pair(juice_agent_t *agent, struct sockaddr *
     if (NULL != remote) {
         *remote = (struct sockaddr*)&pair->remote->resolved.addr;
     }
-    mutex_unlock(&agent->mutex);
     return 0;
 }
 
@@ -224,5 +220,24 @@ JUICE_EXPORT uint16_t juice_server_get_port(juice_server_t *server) {
 #else
 	(void)server;
 	return 0;
+#endif
+}
+
+JUICE_EXPORT int juice_server_add_credentials(juice_server_t *server,
+                                              const juice_server_credentials_t *credentials,
+                                              unsigned long lifetime_ms) {
+#ifndef NO_SERVER
+	if (!server || !credentials)
+		return JUICE_ERR_INVALID;
+
+	if (server_add_credentials(server, credentials, (timediff_t)lifetime_ms) < 0)
+		return JUICE_ERR_FAILED;
+
+	return JUICE_ERR_SUCCESS;
+#else
+	(void)server;
+	(void)credentials;
+	(void)lifetime_ms;
+	return JUICE_ERR_INVALID;
 #endif
 }

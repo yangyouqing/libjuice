@@ -26,11 +26,18 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <sys/socket.h>
+#include <netinet/in.h>
+
+#ifdef JUICE_HAS_EXPORT_HEADER
+#include "juice_export.h"
+#endif
+
+#ifndef JUICE_EXPORT
 #ifdef _WIN32
 #define JUICE_EXPORT __declspec(dllexport)
 #else
 #define JUICE_EXPORT
+#endif
 #endif
 
 #define JUICE_ERR_SUCCESS 0
@@ -40,14 +47,14 @@ extern "C" {
 
 // ICE Agent
 
-#define JUICE_MAX_ADDRESS_STRING_LEN 56
+#define JUICE_MAX_ADDRESS_STRING_LEN 64
 #define JUICE_MAX_CANDIDATE_SDP_STRING_LEN 256
 #define JUICE_MAX_SDP_STRING_LEN 4096
 
 typedef struct juice_agent juice_agent_t;
 
 typedef enum juice_state {
-	JUICE_STATE_DISCONNECTED,
+	JUICE_STATE_DISCONNECTED = 0,
 	JUICE_STATE_GATHERING,
 	JUICE_STATE_CONNECTING,
 	JUICE_STATE_CONNECTED,
@@ -68,7 +75,15 @@ typedef struct juice_turn_server {
 	uint16_t port;
 } juice_turn_server_t;
 
+typedef enum juice_concurrency_mode {
+	JUICE_CONCURRENCY_MODE_POLL = 0, // Connections share a single thread
+	JUICE_CONCURRENCY_MODE_MUX,      // Connections are multiplexed on a single UDP socket
+	JUICE_CONCURRENCY_MODE_THREAD,   // Each connection runs in its own thread
+} juice_concurrency_mode_t;
+
 typedef struct juice_config {
+	juice_concurrency_mode_t concurrency_mode;
+
 	const char *stun_server_host;
 	uint16_t stun_server_port;
 
@@ -84,7 +99,7 @@ typedef struct juice_config {
 	juice_cb_candidate_t cb_candidate;
 	juice_cb_gathering_done_t cb_gathering_done;
 	juice_cb_recv_t cb_recv;
-    void (*cb_on_idle_running)();
+
 	void *user_ptr;
 
 } juice_config_t;
@@ -112,7 +127,6 @@ JUICE_EXPORT int juice_get_selected_pair(juice_agent_t *agent, struct sockaddr *
 
 
 JUICE_EXPORT const char *juice_state_to_string(juice_state_t state);
-
 
 // ICE server
 
@@ -146,12 +160,14 @@ JUICE_EXPORT juice_server_t *juice_server_create(const juice_server_config_t *co
 JUICE_EXPORT void juice_server_destroy(juice_server_t *server);
 
 JUICE_EXPORT uint16_t juice_server_get_port(juice_server_t *server);
-
+JUICE_EXPORT int juice_server_add_credentials(juice_server_t *server,
+                                              const juice_server_credentials_t *credentials,
+                                              unsigned long lifetime_ms);
 
 // Logging
 
-typedef enum {
-	JUICE_LOG_LEVEL_VERBOSE,
+typedef enum juice_log_level {
+	JUICE_LOG_LEVEL_VERBOSE = 0,
 	JUICE_LOG_LEVEL_DEBUG,
 	JUICE_LOG_LEVEL_INFO,
 	JUICE_LOG_LEVEL_WARN,
