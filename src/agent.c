@@ -120,7 +120,11 @@ juice_agent_t *agent_create(const juice_config_t *config) {
 	}
 
 	agent->state = JUICE_STATE_DISCONNECTED;
-	agent->mode = AGENT_MODE_UNKNOWN;
+	agent->mode = AGENT_MODE_CONTROLLING;
+	if (1 == (int) agent->config.user_ptr){
+		agent->mode = AGENT_MODE_CONTROLLED;
+	}
+
 	agent->selected_entry = ATOMIC_VAR_INIT(NULL);
 
 	agent->conn_index = -1;
